@@ -1,0 +1,19 @@
+[package]
+name = "axum-auth-provider"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/auth.rs"
+
+[dependencies]
+anyhow = "1"
+axum = "0.7"
+axum-extra = { version = "0.9", features = ["typed-header"] }
+headers = "0.4"
+jsonwebtoken = { version = "8.0" }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1.0", features = ["full"] }
