@@ -100,7 +100,7 @@ pub struct Claims {
 }
 
 pub async fn auth_middleware(
-    State(auth_provider): State<Arc<dyn AuthProvider + Send + Sync>>,
+    State(auth_provider): State<Arc<dyn AuthProvider>>,
     TypedHeader(authorization): TypedHeader<Authorization<Bearer>>,
     mut request: Request,
     next: Next,
