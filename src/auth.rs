@@ -1,11 +1,11 @@
 pub mod cached_jwk_set;
 
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, ops::Deref, sync::Arc};
 
 use axum::{
     async_trait,
-    extract::{Request, State},
-    http::StatusCode,
+    extract::{FromRequestParts, Request, State},
+    http::{request::Parts, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -50,7 +50,7 @@ impl IntoResponse for AuthError {
 }
 
 #[async_trait]
-pub trait AuthProvider {
+pub trait AuthProvider: Send + Sync {
     async fn jwk_set(&self) -> Result<JwkSet, AuthError>;
 
     fn decode_validation(&self, validation: Validation) -> Validation {
@@ -113,4 +113,27 @@ pub async fn auth_middleware(
     request.extensions_mut().insert(claims);
 
     Ok(next.run(request).await)
+}
+
+pub struct Token(TokenData<Claims>);
+
+impl Deref for Token {
+    type Target = TokenData<Claims>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for Token {
+    type Rejection = StatusCode;
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let token = parts
+            .extensions
+            .get::<TokenData<Claims>>()
+            .ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        Ok(Token(token.to_owned()))
+    }
 }
