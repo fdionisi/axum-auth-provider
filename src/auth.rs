@@ -2,20 +2,19 @@ pub mod cached_jwk_set;
 
 use std::{convert::Infallible, ops::Deref, sync::Arc};
 
+use async_trait::async_trait;
 use axum::{
-    async_trait,
+    Json,
     extract::{FromRequestParts, Request, State},
-    http::{request::Parts, StatusCode},
+    http::{StatusCode, request::Parts},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 use axum_extra::TypedHeader;
-use headers::{authorization::Bearer, Authorization};
+use headers::{Authorization, authorization::Bearer};
 use jsonwebtoken::{
-    decode, decode_header,
+    DecodingKey, TokenData, Validation, decode, decode_header,
     jwk::{AlgorithmParameters, JwkSet},
-    DecodingKey, TokenData, Validation,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -125,15 +124,19 @@ impl Deref for Token {
     }
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for Token {
     type Rejection = StatusCode;
-    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-        let token = parts
-            .extensions
-            .get::<TokenData<Claims>>()
-            .ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
+    fn from_request_parts(
+        parts: &mut Parts,
+        _: &S,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> {
+        async move {
+            let token = parts
+                .extensions
+                .get::<TokenData<Claims>>()
+                .ok_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        Ok(Token(token.to_owned()))
+            Ok(Token(token.to_owned()))
+        }
     }
 }

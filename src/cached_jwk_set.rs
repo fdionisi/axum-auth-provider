@@ -3,8 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::async_trait;
-use jsonwebtoken::{jwk::JwkSet, Validation};
+use async_trait::async_trait;
+use http_client::{HttpClient, Request, RequestBuilderExt, ResponseAsyncBodyExt};
+use jsonwebtoken::{Validation, jwk::JwkSet};
 use tokio::sync::Mutex;
 
 use crate::{AuthError, AuthProvider};
@@ -50,12 +51,14 @@ pub struct CachedJwkSet {
     duration: Duration,
     validator: Arc<dyn Fn(Validation) -> Validation + Send + Sync>,
     cached_keys: Arc<Mutex<SingleCache<JwkSet>>>,
+    http_client: Arc<dyn HttpClient>,
 }
 
 pub struct CachedJwkSetBuilder {
     issuer: Option<String>,
     duration: Option<Duration>,
     validator: Option<Arc<dyn Fn(Validation) -> Validation + Send + Sync>>,
+    http_client: Option<Arc<dyn HttpClient>>,
 }
 
 impl CachedJwkSet {
@@ -64,6 +67,7 @@ impl CachedJwkSet {
             issuer: None,
             duration: None,
             validator: None,
+            http_client: None,
         }
     }
 }
@@ -87,6 +91,11 @@ impl CachedJwkSetBuilder {
         self
     }
 
+    pub fn http_client(mut self, http_client: Arc<dyn HttpClient>) -> Self {
+        self.http_client = Some(http_client);
+        self
+    }
+
     pub fn build(&self) -> anyhow::Result<CachedJwkSet> {
         Ok(CachedJwkSet {
             issuer: self
@@ -102,6 +111,10 @@ impl CachedJwkSetBuilder {
                 .to_owned()
                 .ok_or_else(|| anyhow::anyhow!("Validation is required".to_string()))?,
             cached_keys: Arc::new(Mutex::new(SingleCache::default())),
+            http_client: self
+                .http_client
+                .to_owned()
+                .ok_or_else(|| anyhow::anyhow!("HTTP client is required".to_string()))?,
         })
     }
 }
@@ -111,10 +124,15 @@ impl AuthProvider for CachedJwkSet {
     async fn jwk_set(&self) -> Result<JwkSet, AuthError> {
         let mut cached_keys = self.cached_keys.lock().await;
         if cached_keys.is_none() || cached_keys.is_expired() {
-            let client = reqwest::Client::new();
-            let jwk_set = client
-                .get(format!("{}/.well-known/jwks.json", self.issuer))
-                .send()
+            let jwk_set = self
+                .http_client
+                .send(
+                    Request::builder()
+                        .method(http_client::http::Method::GET)
+                        .uri(format!("{}/.well-known/jwks.json", self.issuer))
+                        .end()
+                        .unwrap(),
+                )
                 .await
                 .map_err(|err| AuthError::MissingCredentials(err.to_string()))?
                 .json::<JwkSet>()
