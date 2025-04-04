@@ -47,7 +47,7 @@ impl<T> From<(Duration, T)> for SingleCache<T> {
 }
 
 pub struct CachedJwkSet {
-    issuer: String,
+    jwk_set_uri: String,
     duration: Duration,
     validator: Arc<dyn Fn(Validation) -> Validation + Send + Sync>,
     cached_keys: Arc<Mutex<SingleCache<JwkSet>>>,
@@ -55,7 +55,7 @@ pub struct CachedJwkSet {
 }
 
 pub struct CachedJwkSetBuilder {
-    issuer: Option<String>,
+    jwk_set_uri: Option<String>,
     duration: Option<Duration>,
     validator: Option<Arc<dyn Fn(Validation) -> Validation + Send + Sync>>,
     http_client: Option<Arc<dyn HttpClient>>,
@@ -64,7 +64,7 @@ pub struct CachedJwkSetBuilder {
 impl CachedJwkSet {
     pub fn builder() -> CachedJwkSetBuilder {
         CachedJwkSetBuilder {
-            issuer: None,
+            jwk_set_uri: None,
             duration: None,
             validator: None,
             http_client: None,
@@ -73,8 +73,8 @@ impl CachedJwkSet {
 }
 
 impl CachedJwkSetBuilder {
-    pub fn issuer(mut self, issuer: String) -> Self {
-        self.issuer = Some(issuer);
+    pub fn jwk_set_uri(mut self, jwk_set_uri: String) -> Self {
+        self.jwk_set_uri = Some(jwk_set_uri);
         self
     }
 
@@ -98,8 +98,8 @@ impl CachedJwkSetBuilder {
 
     pub fn build(&self) -> anyhow::Result<CachedJwkSet> {
         Ok(CachedJwkSet {
-            issuer: self
-                .issuer
+            jwk_set_uri: self
+                .jwk_set_uri
                 .to_owned()
                 .ok_or_else(|| anyhow::anyhow!("Issuer is required".to_string()))?,
             duration: self
@@ -129,7 +129,7 @@ impl AuthProvider for CachedJwkSet {
                 .send(
                     Request::builder()
                         .method(http_client::http::Method::GET)
-                        .uri(format!("{}/.well-known/jwks.json", self.issuer))
+                        .uri(self.jwk_set_uri.clone())
                         .end()
                         .unwrap(),
                 )
